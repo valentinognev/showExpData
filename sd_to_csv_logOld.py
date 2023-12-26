@@ -1,15 +1,18 @@
-# -*- coding: utf-8 -*-
-"""
-decode: decodes binary logged sensor data from crazyflie2 with uSD-Card-Deck
-createConfig: create config file which has to placed on µSD-Card
-@author: jsschell
-"""
-from zlib import crc32
-import struct
-import numpy as np
-import os
-import matplotlib.pyplot as plt
+#!/usr/bin/env python3
 
+import argparse
+import csv
+import logging
+import os
+import struct
+from zlib import crc32
+
+import coloredlogs
+import numpy as np
+
+
+# ATTENTION: This file needs to be run with Python 3. However, the file is run automatically when plotting recording
+# from microSD card connected to the computer.
 
 def decode(filename):
     # read file as binary
@@ -83,14 +86,33 @@ def decode(filename):
         output[set_names[ii][0:-3].decode("utf-8").strip()] = set_con[ii]
     return output
 
-if __name__ == "__main__":
-    samplingRate = 100
-    dir = '/home/valento/Robotics/ZVUV/experiments/28/Bolt03/'
-    filenameList = ['sd_03_cf2815']
 
-    data = decode(dir + filenameList[0])
-    tim = data['tick'] / samplingRate
-    plt.plot(tim, data['stateEstimate.z'])
-    plt.xlabel('Time [s]')
-    plt.ylabel('Height [m]')
-    plt.show()
+def main():
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('file')
+    # args = parser.parse_args()
+    # file_path = args.file
+    file_path = '/home/valentin/crazyflie/Recordings/testStep/logOLD06'
+    try:
+        d = decode(file_path)
+    except IndexError:
+        logging.fatal('Something went wrong during file decoding. Check whether you\'re actually decoding a log file.')
+        exit(1)
+    file_dir, filename = os.path.split(file_path)
+    os.chdir(file_dir)
+    with open(file_path + '.csv', 'w') as csv_file:
+        keys = d.keys()
+        writer = csv.DictWriter(csv_file, fieldnames=keys)
+        writer.writeheader()
+        longest_log_length = len(max(d.values(), key=len))
+        for i in range(longest_log_length):
+            writer.writerow({k: d[k][i] for k in keys})
+    logging.info('Successfully converted log file into CSV format.')
+
+
+if __name__ == '__main__':
+    coloredlogs.install()
+
+    main()
+
+    # ls /home/roee/records/Zvuv/ZVUV1_second_batch/ | grep -v txt | xargs -I{} bash -c 'FILE={} && ./sd_log_to_csv.py  /home/roee/records/Zvuv/ZVUV1_second_batch/$FILE'
