@@ -1,9 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import csv
+from numpy import cos, sin
 from math import atan2
 from copy import deepcopy
 
+VALIDLENGTH = 1.0
 
 def generate_ray_hit_points(x, y, vertices, N, noise_std=0.1):
     # Generate equally spaced angles
@@ -50,29 +52,32 @@ def orientation(p, q, r):
 def crossProduct(p1, p2, p3):
     return (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0])
 
-def calcConvexHull(points, numOfValidPoints):
+def calcConvexHull(points):
+    numOfValidPoints = len(points)
     pivot = 0
     for i in range(1, numOfValidPoints):
         if points[i,1] < points[pivot,1] or \
           (points[i,1] == points[pivot,1] and points[i,0] < points[pivot,0]):
             pivot = i
 
-    newPoints = [points[(pivot+i) % numOfValidPoints] for i in range(numOfValidPoints)] + [points[0]]
+    newPoints = [points[(pivot+i) % numOfValidPoints] for i in range(numOfValidPoints)]
+    newPoints = newPoints + [newPoints[0]]
+    newPoints=np.array(newPoints)
 
-    convexHull=[]
-    convexHull.append(newPoints[0])
-    convexHull.append(newPoints[1])
-    hullSize[0] = 2
+    convexHull=np.zeros(np.shape(points))
+    convexHull[0,:] = newPoints[0]
+    convexHull[1,:] = newPoints[1]
+    hullSize = 2
 
     for i in range(2, numOfValidPoints + 1):
-        res = crossProduct(convexHull[hullSize[0] - 2], convexHull[hullSize[0] - 1], newPoints[i])
-        while hullSize[0] > 1 and res <= 0:
-            hullSize[0] -= 1
-            res = crossProduct(convexHull[hullSize[0] - 2], convexHull[hullSize[0] - 1], newPoints[i])
-        convexHull[hullSize[0]] = newPoints[i]
-        hullSize[0] += 1
+        res = crossProduct(convexHull[hullSize - 2], convexHull[hullSize - 1], newPoints[i])
+        while hullSize > 1 and res <= 0:
+            hullSize -= 1
+            res = crossProduct(convexHull[hullSize - 2], convexHull[hullSize - 1], newPoints[i])
+        convexHull[hullSize] = newPoints[i]
+        hullSize += 1
 
-    return convexHull
+    return convexHull, hullSize
 #######################################################################################
 
 def plot_convex_hull(points, convex_hull):
@@ -192,44 +197,57 @@ def readMR18DataFromCSV(file_path, timestart=0, timeend=1000000000):
     mr18Data.append(np.array([float(row['mr18.m17']) for row in data]))
     mr18Data= np.array(mr18Data).transpose()
 
-    return tick[indmstart:indmend]/1000, mr18Data[indmstart:indmend,:]
+    return tick[indmstart:indmend]/1000, mr18Data[indmstart:indmend,:]/1000
 
 #######################################################################################
 
-# Example usage
-point_x = 2.0  # x-coordinate of the point
-point_y = 3.0  # y-coordinate of the point
+inds = np.array(range(1,48,3))
+indr = np.array(range(0,48,3))
 # Vertices of the quadrilateral
 angles = np.linspace(0, 2*np.pi, 16, endpoint=False)
-times, mt18data = readMR18DataFromCSV('/home/valentin/crazyflie/Recordings/tube/sd_33_cf2410chimney2.csv', timestart=155000, timeend=190000)
+times, mt18data = readMR18DataFromCSV('/home/valentin/Downloads/sd_33_cf2410chimney2.csv', timestart=155000, timeend=190000)
 num_rays = 8  # Number of equally spaced rays
 
 for i in range(len(times)):
     ranges = mt18data[i,0:16]
     #    hit_points = generate_ray_hit_points(point_x, point_y, quad_vertices, num_rays, noise_std=0.1)
-    hit_points = np.array([ranges*np.cos(angles), ranges*np.sin(angles)]).transpose() 
+    allPoints = np.array([ranges*np.cos(angles), ranges*np.sin(angles)]).transpose() 
+    validPoints = ranges < VALIDLENGTH
+    indV = np.where(validPoints)[0]
+    indNV = np.where(~validPoints)[0]
 
-    convex_hull = graham_scan(hit_points)
-    convex_hullarr = np.array(convex_hull)
+    points = allPoints[validPoints,:]
+    convex_hull, hull_size = calcConvexHull(points)  #graham_scan(hit_points)
+    convex_hullarr = np.array(convex_hull)[:(hull_size-1)]
     quad_vertices = convexHull2Polygon(convex_hullarr,4)
 
     # Plotting the quadrilateral, ray start point, rays, and ray hit points
     quad_x, quad_y = zip(*quad_vertices, quad_vertices[0])  # Closing the loop
 
-    plt.figure()
-    plt.plot(quad_x, quad_y, 'b-', label='Quadrilateral')
-    plt.plot(point_x, point_y, 'go', label='Ray Start Point')
+    # raysV = np.zeros((48, 2))+np.nan
+    # raysV[inds[indV], 0] = ranges[indV]*cos(angles[indV])
+    # raysV[inds[indV], 1] = ranges[indV]*sin(angles[indV])
+    # raysV[indr[indV], 0] = ranges[indV]*cos(angles[indV])*0
+    # raysV[indr[indV], 1] = ranges[indV]*sin(angles[indV])*0
 
-    for hit_x, hit_y in hit_points:
-        plt.plot([point_x, hit_x], [point_y, hit_y], 'k--', alpha=0.5)
-        plt.plot(hit_x, hit_y, 'ro')
+    # raysNV = np.zeros((48, 2))+np.nan
+    # raysNV[inds[indNV], 0] = ranges[indNV]*cos(angles[indNV])
+    # raysNV[inds[indNV], 1] = ranges[indNV]*sin(angles[indNV])
+    # raysNV[indr[indNV], 0] = ranges[indNV]*cos(angles[indNV])*0
+    # raysNV[indr[indNV], 1] = ranges[indNV]*sin(angles[indNV])*0
+    # 
+    # plt.figure(1)
+    # plt.plot(raysV[:, 0], raysV[:, 1], 'b', linewidth=1)
+    # plt.plot(raysNV[:, 0], raysNV[:, 1], 'r', linewidth=1)
+    # plt.plot(convex_hullarr[:, 0], convex_hullarr[:, 1], 'g', linewidth=1)
+    # plt.plot(quad_vertices[:, 0], quad_vertices[:, 1], 'm', linewidth=1)
 
-    plt.title('Quadrilateral, Ray Start Point, and Rays with Gaussian Noise')
-    plt.xlabel('X-axis')
-    plt.ylabel('Y-axis')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+    # plt.title('Quadrilateral, Ray Start Point, and Rays with Gaussian Noise')
+    # plt.xlabel('X-axis')
+    # plt.ylabel('Y-axis')
+    # plt.legend()
+    # plt.grid(True)
+    # plt.show()
 a=1
 # Generate some random points forming a convex hull
 # import numpy as np
