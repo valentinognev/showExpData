@@ -174,21 +174,23 @@ for inFile in fileNameList:
                 t.transform.rotation = Quaternion(*quaternion_from_euler(0, 0, yawSf[ODOM]*(row[[odomSigYaw[ODOM]]].values), 'rxyz'))
                 t.transform.translation.x = row[[odomSigX[ODOM]]].values
                 t.transform.translation.y = row[[odomSigY[ODOM]]].values
-                
+
+                for col in col_head:
+                    bag.write('/'+col,Float32(row[col]), t=rospy.Time(t_curr))
                 bag.write('/fa_node/mr18',ls_msg, t=ls_msg.header.stamp)
                 bag.write('/tf', tf_msg, t=t.header.stamp)
 
                 vxy_cmd = row[['state_machine.vx_sp', 'state_machine.vy_sp']].values
                 arw_mrkr.update_arrow_mrkr(vxy_cmd[0], vxy_cmd[1], rospy.Time(t_curr))
-                bag.write('/v_cmd', arw_mrkr.arroy_mrkr, t=rospy.Time(t_curr))
+                # bag.write('/v_cmd', arw_mrkr.arroy_mrkr, t=rospy.Time(t_curr))
 
-                bag.write('/squal',Int16(int(row['motion.squal'])), t=rospy.Time(t_curr))
-                bag.write('/motor1',Int32(int(row['motor.m1'])), t=rospy.Time(t_curr))
-                bag.write('/HL_ratio',Float32(row['FF_Angle.HL_ratio']), t=rospy.Time(t_curr))
-                bag.write('/shutter',Float32(row['motion.shutter']), t=rospy.Time(t_curr))
-                bag.write('/range_zrange',Float32(row['range.zrange']*0.001), t=rospy.Time(t_curr))
-                bag.write('/mr18_m16_zrange',Float32(-row['mr18.m16']*0.001), t=rospy.Time(t_curr))
-                bag.write('/pm_vbat',Float32(row['pm.vbat']), t=rospy.Time(t_curr))
+                # bag.write('/squal',Int16(int(row['motion.squal'])), t=rospy.Time(t_curr))
+                # bag.write('/motor1',Int32(int(row['motor.m1'])), t=rospy.Time(t_curr))
+                # bag.write('/HL_ratio',Float32(row['FF_Angle.HL_ratio']), t=rospy.Time(t_curr))
+                # bag.write('/shutter',Float32(row['motion.shutter']), t=rospy.Time(t_curr))
+                # bag.write('/range_zrange',Float32(row['range.zrange']*0.001), t=rospy.Time(t_curr))
+                # bag.write('/mr18_m16_zrange',Float32(-row['mr18.m16']*0.001), t=rospy.Time(t_curr))
+                # bag.write('/pm_vbat',Float32(row['pm.vbat']), t=rospy.Time(t_curr))
                 
 
                 if ZO:
