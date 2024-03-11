@@ -1,9 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import csv
+from numpy import cos, sin
 from math import atan2
 from copy import deepcopy
 
+VALIDLENGTH = 1.0
 
 def generate_ray_hit_points(x, y, vertices, N, noise_std=0.1):
     # Generate equally spaced angles
@@ -50,29 +52,32 @@ def orientation(p, q, r):
 def crossProduct(p1, p2, p3):
     return (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0])
 
-def calcConvexHull(points, numOfValidPoints):
+def calcConvexHull(points):
+    numOfValidPoints = len(points)
     pivot = 0
     for i in range(1, numOfValidPoints):
         if points[i,1] < points[pivot,1] or \
           (points[i,1] == points[pivot,1] and points[i,0] < points[pivot,0]):
             pivot = i
 
-    newPoints = [points[(pivot+i) % numOfValidPoints] for i in range(numOfValidPoints)] + [points[0]]
+    newPoints = [points[(pivot+i) % numOfValidPoints] for i in range(numOfValidPoints)]
+    newPoints = newPoints + [newPoints[0]]
+    newPoints=np.array(newPoints)
 
-    convexHull=[]
-    convexHull.append(newPoints[0])
-    convexHull.append(newPoints[1])
-    hullSize[0] = 2
+    convexHull=np.zeros(np.shape(points))
+    convexHull[0,:] = newPoints[0]
+    convexHull[1,:] = newPoints[1]
+    hullSize = 2
 
     for i in range(2, numOfValidPoints + 1):
-        res = crossProduct(convexHull[hullSize[0] - 2], convexHull[hullSize[0] - 1], newPoints[i])
-        while hullSize[0] > 1 and res <= 0:
-            hullSize[0] -= 1
-            res = crossProduct(convexHull[hullSize[0] - 2], convexHull[hullSize[0] - 1], newPoints[i])
-        convexHull[hullSize[0]] = newPoints[i]
-        hullSize[0] += 1
+        res = crossProduct(convexHull[hullSize - 2], convexHull[hullSize - 1], newPoints[i])
+        while hullSize > 1 and res <= 0:
+            hullSize -= 1
+            res = crossProduct(convexHull[hullSize - 2], convexHull[hullSize - 1], newPoints[i])
+        convexHull[hullSize] = newPoints[i]
+        hullSize += 1
 
-    return convexHull
+    return convexHull, hullSize
 #######################################################################################
 
 def plot_convex_hull(points, convex_hull):
@@ -147,6 +152,18 @@ def convexHull2Polygon(hull, N):
 
 #######################################################################################
 
+def calculateCenters(poly):
+    areaCenter = np.mean(poly, 0)
+
+    maxP = np.max(poly, 0)
+    minP = np.min(poly, 0)
+
+    simpleCenter = (maxP + minP) / 2
+
+    return areaCenter, simpleCenter
+
+#######################################################################################
+
 def readMR18DataFromCSV(file_path, timestart=0, timeend=1000000000):
     # Initialize an empty list to store data
     data = []
@@ -192,44 +209,149 @@ def readMR18DataFromCSV(file_path, timestart=0, timeend=1000000000):
     mr18Data.append(np.array([float(row['mr18.m17']) for row in data]))
     mr18Data= np.array(mr18Data).transpose()
 
-    return tick[indmstart:indmend]/1000, mr18Data[indmstart:indmend,:]
+    newTick = np.linspace(tick[indmstart], tick[indmend], indmend-indmstart)
+    newmr18Data = np.zeros((indmend-indmstart, 18))
+    for i in range(18):
+        newmr18Data[:,i] = np.interp(newTick, tick[indmstart:indmend], mr18Data[indmstart:indmend,i])
+    
+    return newTick/1000, newmr18Data/1000
+
+    # return tick[indmstart:indmend]/1000, mr18Data[indmstart:indmend,:]/1000
+
+#######################################################################################
+def simple_lowpass_filter(data, cutoff_frequency, samp_rate):
+    """
+    Simple low-pass filter using a moving average.
+
+    Parameters:
+    - data: The input data array.
+    - cutoff_frequency: The cutoff frequency for the low-pass filter.
+    - samp_rate: The sampling rate of the data.
+
+    Returns:
+    - filtered_data: The filtered output data array.
+    """
+
+    # Calculate the filter window size
+    window_size = int(samp_rate / cutoff_frequency)
+
+    # Initialize the filtered data array
+    filtered_data = np.zeros_like(data)
+
+    # Apply the moving average filter
+    for i in range(window_size, len(data)):
+        filtered_data[i] = np.mean(data[i - window_size:i])
+
+    return filtered_data
 
 #######################################################################################
 
-# Example usage
-point_x = 2.0  # x-coordinate of the point
-point_y = 3.0  # y-coordinate of the point
+inds = np.array(range(1,48,3))
+indr = np.array(range(0,48,3))
 # Vertices of the quadrilateral
 angles = np.linspace(0, 2*np.pi, 16, endpoint=False)
+# times, mt18data = readMR18DataFromCSV('/home/valentin/Downloads/sd_33_cf2410chimney2.csv', timestart=155000, timeend=190000)
 times, mt18data = readMR18DataFromCSV('/home/valentin/crazyflie/Recordings/tube/sd_33_cf2410chimney2.csv', timestart=155000, timeend=190000)
 num_rays = 8  # Number of equally spaced rays
+
+centers = np.zeros((len(times), 12))
+distance = np.zeros((len(times), 2))
 
 for i in range(len(times)):
     ranges = mt18data[i,0:16]
     #    hit_points = generate_ray_hit_points(point_x, point_y, quad_vertices, num_rays, noise_std=0.1)
-    hit_points = np.array([ranges*np.cos(angles), ranges*np.sin(angles)]).transpose() 
+    allPoints = np.array([ranges*np.cos(angles), ranges*np.sin(angles)]).transpose() 
+    validPointInds = ranges < VALIDLENGTH*2
+    indV = np.where(validPointInds)[0]
+    indNV = np.where(~validPointInds)[0]
 
-    convex_hull = graham_scan(hit_points)
-    convex_hullarr = np.array(convex_hull)
+    validPoints = allPoints[validPointInds,:]
+    convex_hull, hull_size = calcConvexHull(validPoints)  #graham_scan(hit_points)
+    convex_hullarr = np.array(convex_hull)[:(hull_size-1)]
     quad_vertices = convexHull2Polygon(convex_hullarr,4)
 
-    # Plotting the quadrilateral, ray start point, rays, and ray hit points
-    quad_x, quad_y = zip(*quad_vertices, quad_vertices[0])  # Closing the loop
+    [validAreaCenter, validSimpleCenter] = calculateCenters(validPoints)
+    [hullAreaCenter, hullSimpleCenter] = calculateCenters(convex_hullarr)
+    [quadAreaCenter, quadSimpleCenter] = calculateCenters(quad_vertices)
 
-    plt.figure()
-    plt.plot(quad_x, quad_y, 'b-', label='Quadrilateral')
-    plt.plot(point_x, point_y, 'go', label='Ray Start Point')
+    centers[i,:] = np.array([validAreaCenter[0], validAreaCenter[1], \
+                             validSimpleCenter[0], validSimpleCenter[1], \
+                             hullAreaCenter[0], hullAreaCenter[1], \
+                             hullSimpleCenter[0], hullSimpleCenter[1], \
+                             quadAreaCenter[0]*0, quadAreaCenter[1]*0, \
+                             quadSimpleCenter[0]*0, quadSimpleCenter[1]*0])
+    distance[i,:] = np.array([ranges[0]-0.3, ranges[4]-0.3])
 
-    for hit_x, hit_y in hit_points:
-        plt.plot([point_x, hit_x], [point_y, hit_y], 'k--', alpha=0.5)
-        plt.plot(hit_x, hit_y, 'ro')
+    if times[i] > 174 and times[i] < 175:
+        raysV = np.zeros((48, 2))+np.nan
+        raysV[inds[indV], 0] = ranges[indV]*cos(angles[indV])
+        raysV[inds[indV], 1] = ranges[indV]*sin(angles[indV])
+        raysV[indr[indV], 0] = ranges[indV]*cos(angles[indV])*0
+        raysV[indr[indV], 1] = ranges[indV]*sin(angles[indV])*0
 
-    plt.title('Quadrilateral, Ray Start Point, and Rays with Gaussian Noise')
-    plt.xlabel('X-axis')
-    plt.ylabel('Y-axis')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+        raysNV = np.zeros((48, 2))+np.nan
+        raysNV[inds[indNV], 0] = ranges[indNV]*cos(angles[indNV])
+        raysNV[inds[indNV], 1] = ranges[indNV]*sin(angles[indNV])
+        raysNV[indr[indNV], 0] = ranges[indNV]*cos(angles[indNV])*0
+        raysNV[indr[indNV], 1] = ranges[indNV]*sin(angles[indNV])*0
+        
+        plt.figure(1)
+        plt.plot(raysV[:, 0], raysV[:, 1], 'b', linewidth=1, label='Valid rays')
+        plt.plot(raysNV[:, 0], raysNV[:, 1], 'r', linewidth=1, label='Invalid rays')
+        plt.plot(convex_hullarr[:, 0], convex_hullarr[:, 1], 'g', linewidth=1, label='Convex Hull')
+        # plt.plot(quad_vertices[:, 0], quad_vertices[:, 1], 'm', linewidth=1, label='Bounding Quad')
+        plt.plot(validAreaCenter[0], validAreaCenter[1], 'bo', label='Valid Area Center')
+        plt.plot(validSimpleCenter[0], validSimpleCenter[1], 'bx', label='Valid Simple Center')
+        plt.plot(hullAreaCenter[0], hullAreaCenter[1], 'go', label='Hull Area Center')
+        plt.plot(hullSimpleCenter[0], hullSimpleCenter[1], 'gx', label='Hull Simple Center')
+        # plt.plot(quadAreaCenter[0], quadAreaCenter[1], 'mo', label='Quad Area Center')
+        # plt.plot(quadSimpleCenter[0], quadSimpleCenter[1], 'mx', label='Quad Simple Center')
+        
+        plt.title('Quadrilateral, Ray Start Point, and Rays with Gaussian Noise')
+        plt.xlabel('X-axis')
+        plt.ylabel('Y-axis')
+        plt.legend()
+        plt.grid(True)
+        plt.axis('equal')
+        plt.show()
+samplingRate = 1./np.mean(np.diff(times))
+cutOffFreq = 10
+for i in range(centers.shape[1]):
+    centers[:,i] = simple_lowpass_filter(centers[:,i], cutOffFreq/2, samplingRate)
+
+for i in range(distance.shape[1]):
+    distance[:,i] = simple_lowpass_filter(centers[:,i], cutOffFreq, samplingRate)
+
+plt.figure(2)
+plt.subplot(2,1,1)
+plt.plot(times, centers[:,0], 'b', linewidth=1, label='Valid Area Center')
+plt.plot(times, centers[:,2], 'r', linewidth=1, label='Valid Simple Center')
+plt.plot(times, centers[:,4], 'g', linewidth=1, label='Hull Area Center')
+plt.plot(times, centers[:,6], 'm', linewidth=1, label='Hull Simple Center')
+plt.plot(times, centers[:,8], 'c', linewidth=1, label='Quad Area Center')
+plt.plot(times, centers[:,10], 'y', linewidth=1, label='Quad Simple Center')
+plt.plot(times, distance[:,0], 'b', linewidth=1, label='simpleDistance')
+plt.title('Centers X')
+plt.legend()
+plt.grid(True)
+
+plt.subplot(2,1,2)
+plt.plot(times, centers[:,1], 'b', linewidth=1, label='Valid Area Center')
+plt.plot(times, centers[:,3], 'r', linewidth=1, label='Valid Simple Center')
+plt.plot(times, centers[:,5], 'g', linewidth=1, label='Hull Area Center')
+plt.plot(times, centers[:,7], 'm', linewidth=1, label='Hull Simple Center')
+plt.plot(times, centers[:,9], 'c', linewidth=1, label='Quad Area Center')
+plt.plot(times, centers[:,11], 'y', linewidth=1, label='Quad Simple Center')
+plt.plot(times, distance[:,1], 'b', linewidth=1, label='simpleDistance')
+plt.title('Centers Y')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# plt.figure(3)
+# plt.plot(times[:-1], np.diff(times), 'b', linewidth=1, label='Sampling Time')
+# plt.title('Sampling Time')
+# plt.show()
 a=1
 # Generate some random points forming a convex hull
 # import numpy as np
