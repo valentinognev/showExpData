@@ -82,16 +82,16 @@ class Trace:
         if step_analysis == StepAnalysisType.VELOCITY:
             Trace.framelen = 6
             Trace.resplen = 3
-            Trace.threshold = 3
-            Trace.low_threshold = 1
+            Trace.threshold = max(abs(setpoint))/10*9
+            Trace.low_threshold = max(abs(setpoint))/5
         elif step_analysis == StepAnalysisType.ANGLE:
             Trace.framelen = 2
             Trace.resplen = 1
             Trace.threshold = 40
             Trace.low_threshold = 1
 
-        self.flen = self.stepcalc(self.time, self.framelen)        # array len corresponding to framelen in s
-        self.rlen = self.stepcalc(self.time, self.resplen)         # array len corresponding to resplen in s
+        self.flen = self.steplengthcalc(self.time, self.framelen)        # array len corresponding to framelen in s
+        self.rlen = self.steplengthcalc(self.time, self.resplen)         # array len corresponding to resplen in s
         self.time_resp = self.time[0:self.rlen]-self.time[0]
 
         self.stacks = self.winstacker({'time':[],'setpoint':[],'result':[], 'throttle':[]}, self.flen, Trace.superpos)                                  # [[time, setpoint, output],]
@@ -112,7 +112,7 @@ class Trace:
             self.resp_high = self.weighted_mode_avr(values=self.spec_sm, weights=self.high_mask*self.toolow_mask, vertrange=Trace.vert_range, vertbins=1000)
 
         if 'd_err' in self.data:
-            self.noise_winlen = self.stepcalc(self.time, Trace.noise_framelen)
+            self.noise_winlen = self.steplengthcalc(self.time, Trace.noise_framelen)
             self.noise_stack = self.winstacker({'time':[], 'result':[], 'throttle':[], 'd_err':[], 'debug':[]},
                                                self.noise_winlen, Trace.noise_superpos)
             self.noise_win = np.hanning(self.noise_winlen)
@@ -130,10 +130,11 @@ class Trace:
 
     @staticmethod
     def low_high_mask(signal, threshold):
-        low = np.copy(signal)
+        sig = np.copy(signal)
 
-        low[low <=threshold] = 1.
-        low[low > threshold] = 0.
+        low = np.zeros_like(sig)
+        low[abs(sig) <=threshold] = 1.
+        low[abs(sig) > threshold] = 0.
         high = -low+1.
 
         if high.sum() < 10:     # ignore high pinput that is too short
@@ -209,7 +210,7 @@ class Trace:
         return (newtime, output)
 
 
-    def stepcalc(self, time, duration):
+    def steplengthcalc(self, time, duration):
         ### calculates frequency and resulting windowlength
         tstep = (time[-1]-time[0])/len(time)
         freq = 1./tstep

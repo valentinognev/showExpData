@@ -235,32 +235,64 @@ def getDataFromUlog(ulogFileName, startTime=0, endTime=1000):
 ####################################################################################################################
 ####################################################################################################################
 ####################################################################################################################
+if __name__ == '__main__':
+    
+    if 0:
+        binFile = '/home/valentin/Projects/Triangle/Records/11-6-25ein_yahav.BIN'
+        timeLine, attCommand, attResponse, ratesCommand, ratesResponse, thrustCommand, positionCommand, positionResponse = \
+            getDataFromBINFile(binFile, startTime=2500, endTime=3000)
 
-binFile = '/home/valentin/Projects/Triangle/Records/11-6-25ein_yahav.BIN'
-timeLine, attCommand, attResponse, ratesCommand, ratesResponse, thrustCommand, positionCommand, positionResponse = \
-       getDataFromBINFile(binFile, startTime=2500, endTime=3000)
+        samplingRate = int(1/np.mean(np.diff(timeLine)))
 
-# matFile2 = '/home/valentin/Projects/Triangle/Records/t/00000015.BIN-322292.mat'
-# timeLine, pitchRateCommand, pitchRateResponse, rollRateCommand, rollRateResponse, throttle = \
-#        getDataFromMatFile(matFile2, startTime=510, endTime=710)
+        Ycorrection = 1
+        stepRespDuration = 10
+        segmentLength = stepRespDuration
 
-# ulogFileName = '/home/valentin/Projects/GambitonBiut/Recordings/log_3_UnknownDate.ulg'
-# timeLine, attCommand, attResponse, ratesCommand, ratesResponse, thrustCommand, positionCommand, positionResponse = getDataFromUlog(ulogFileName, startTime=70, endTime=170)
+        trace = Trace(name='pitchRate', time=timeLine, result=ratesResponse['pitch'], setpoint=ratesCommand['pitch'], throttle=thrustCommand['thrust'], resplen=3)
+        plot_pid_response(trace, timeLine, ratesCommand['pitch'], ratesResponse['pitch'], fignum=10, label='Pitch Rate')
 
-samplingRate = int(1/np.mean(np.diff(timeLine)))
+        trace = Trace(name='rollRate', time=timeLine, result=ratesResponse['roll'], setpoint=ratesCommand['roll'], throttle=thrustCommand['thrust'], resplen=3)
+        plot_pid_response(trace, timeLine, ratesCommand['roll'], ratesResponse['roll'], fignum=11, label='Roll Rate')
 
-Ycorrection = 1
-stepRespDuration = 10
-segmentLength = stepRespDuration
+        plt.show()
+        pass
 
-trace = Trace(name='pitchRate', time=timeLine, result=ratesResponse['pitch'], setpoint=ratesCommand['pitch'], throttle=thrustCommand['thrust'], resplen=3)
-plot_pid_response(trace, timeLine, ratesCommand['pitch'], ratesResponse['pitch'], fignum=10, label='Pitch Rate')
+    # matFile2 = '/home/valentin/Projects/Triangle/Records/t/00000015.BIN-322292.mat'
+    # timeLine, pitchRateCommand, pitchRateResponse, rollRateCommand, rollRateResponse, throttle = \
+    #        getDataFromMatFile(matFile2, startTime=510, endTime=710)
+    else:
+        ulogFileName = '/home/valentin/Projects/GambitonBiut/Recordings/log_7_UnknownDate.ulg'
+        timeLine, attCommand, attResponse, ratesCommand, ratesResponse, thrustCommand, positionCommand, positionResponse = getDataFromUlog(ulogFileName, startTime=70, endTime=170)
 
-trace = Trace(name='rollRate', time=timeLine, result=ratesResponse['roll'], setpoint=ratesCommand['roll'], throttle=thrustCommand['thrust'], resplen=3)
-plot_pid_response(trace, timeLine, ratesCommand['roll'], ratesResponse['roll'], fignum=11, label='Roll Rate')
+        samplingRate = int(1/np.mean(np.diff(timeLine)))
 
-plt.show()
-pass
+        Ycorrection = 1
+        stepRespDuration = 10
+        segmentLength = stepRespDuration
+
+        traceVelX = Trace(name='velX', time=timeLine, result=positionResponse['vx'], setpoint=positionCommand['vx'], throttle=thrustCommand['thrust'], resplen=3, step_analysis=StepAnalysisType.VELOCITY)
+        plot_pid_response(traceVelX, timeLine, positionCommand['vx'], positionResponse['vx'], fignum=14, label='Velocity X')
+
+        traceVelY = Trace(name='velY', time=timeLine, result=positionResponse['vy'], setpoint=positionCommand['vy'], throttle=thrustCommand['thrust'], resplen=3, step_analysis=StepAnalysisType.VELOCITY)
+        plot_pid_response(traceVelY, timeLine, positionCommand['vy'], positionResponse['vy'], fignum=15, label='Velocity Y')
+
+        traceVelZ = Trace(name='velZ', time=timeLine, result=positionResponse['vz'], setpoint=positionCommand['vz'], throttle=thrustCommand['thrust'], resplen=3, step_analysis=StepAnalysisType.VELOCITY)
+        plot_pid_response(traceVelZ, timeLine, positionCommand['vz'], positionResponse['vz'], fignum=16, label='Velocity Z')
+
+        tracePitchRate = Trace(name='pitchRate', time=timeLine, result=ratesResponse['pitch'], setpoint=ratesCommand['pitch'], throttle=thrustCommand['thrust'], resplen=3, step_analysis=StepAnalysisType.ANGLE_RATE)
+        plot_pid_response(tracePitchRate, timeLine, ratesCommand['pitch'], ratesResponse['pitch'], fignum=10, label='Pitch Rate')
+
+        traceRollRate = Trace(name='rollRate', time=timeLine, result=ratesResponse['roll'], setpoint=ratesCommand['roll'], throttle=thrustCommand['thrust'], resplen=3, step_analysis=StepAnalysisType.ANGLE_RATE)
+        plot_pid_response(traceRollRate, timeLine, ratesCommand['roll'], ratesResponse['roll'], fignum=11, label='Roll Rate')
+
+        tracePitchAtt = Trace(name='pitchAtt', time=timeLine, result=attResponse['pitch'], setpoint=attCommand['pitch'], throttle=thrustCommand['thrust'], resplen=3, step_analysis=StepAnalysisType.ANGLE)
+        plot_pid_response(tracePitchAtt, timeLine, attCommand['pitch'], attResponse['pitch'], fignum=12, label='Pitch Attitude')
+
+        traceRollAtt = Trace(name='rollAtt', time=timeLine, result=attResponse['roll'], setpoint=attCommand['roll'], throttle=thrustCommand['thrust'], resplen=3, step_analysis=StepAnalysisType.ANGLE)
+        plot_pid_response(traceRollAtt, timeLine, attCommand['roll'], attResponse['roll'], fignum=13, label='Roll Attitude')
+
+        plt.show()
+        pass
 
 
 
